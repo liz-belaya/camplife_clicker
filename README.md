@@ -1,0 +1,1 @@
+# camplife_clicker
