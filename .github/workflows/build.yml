@@ -8,7 +8,8 @@ on:
 env:
   APP_NAME: camplife-clicker
   ENTRY: main.py
-  PLAYWRIGHT_BROWSERS_PAHT: 0
+  # ВАЖНО: кладём браузеры ВНУТРЬ пакета playwright (чтобы попали в exe/app)
+  PLAYWRIGHT_BROWSERS_PATH: 0
 
 jobs:
   macos-arm64:
@@ -18,47 +19,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install deps
+
+      - name: Install deps + browsers
         run: |
           python -m pip install -U pip wheel pyinstaller
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Build
+          python -m playwright install chromium
+
+      - name: Build (PyInstaller)
         run: |
-          pyinstaller -F -n "$APP_NAME" "$ENTRY"
-          # для GUI без консоли замени на: pyinstaller -F --windowed -n "$APP_NAME" "$ENTRY"
+          pyinstaller -F -n "$APP_NAME" \
+            --collect-all playwright \
+            --hidden-import playwright._impl._path_utils \
+            --hidden-import playwright._impl._driver \
+            "$ENTRY"
+          # GUI без консоли: добавь --windowed
+
       - name: Package
         run: |
           mkdir -p package && cp -R dist/* package/
+          if [ -f README.md ]; then cp README.md package/; fi
           if [ -f README.txt ]; then cp README.txt package/; fi
           cd package && zip -r "../$APP_NAME-macOS-arm64.zip" .
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-macOS-arm64
           path: ${{ env.APP_NAME }}-macOS-arm64.zip
-
-  macos-intel:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install deps
-        run: |
-          python -m pip install -U pip wheel pyinstaller
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Build
-        run: |
-          pyinstaller -F -n "$APP_NAME" "$ENTRY"
-      - name: Package
-        run: |
-          mkdir -p package && cp -R dist/* package/
-          if [ -f README.txt ]; then cp README.txt package/; fi
-          cd package && zip -r "../$APP_NAME-macOS-Intel.zip" .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.APP_NAME }}-macOS-Intel
-          path: ${{ env.APP_NAME }}-macOS-Intel.zip
 
   windows:
     runs-on: windows-latest
@@ -67,20 +53,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install deps
+
+      - name: Install deps + browsers
+        shell: pwsh
         run: |
           python -m pip install -U pip wheel pyinstaller
           if (Test-Path "requirements.txt") { pip install -r requirements.txt }
-      - name: Build
+          python -m playwright install chromium
+
+      - name: Build (PyInstaller)
+        shell: pwsh
         run: |
-          pyinstaller -F -n $env:APP_NAME $env:ENTRY
-          # для GUI без консоли: pyinstaller -F --noconsole -n $env:APP_NAME $env:ENTRY
+          pyinstaller -F -n $env:APP_NAME `
+            --collect-all playwright `
+            --hidden-import playwright._impl._path_utils `
+            --hidden-import playwright._impl._driver `
+            $env:ENTRY
+          # GUI без консоли: добавь --noconsole
+
       - name: Package
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item dist\* package\ -Recurse
+          if (Test-Path "README.md") { Copy-Item README.md package\ }
           if (Test-Path "README.txt") { Copy-Item README.txt package\ }
           Compress-Archive -Path package\* -DestinationPath "$env:APP_NAME-Windows.zip" -Force
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-Windows
