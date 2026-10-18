@@ -67,8 +67,10 @@ async def main():
 
     # Подготовим Playwright браузер заранее
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=HEADLESS)
-        ctx = await browser.new_context()
+        ctx = await p.chromium.launch_persistent_context(
+            user_data_dir="./camplife_profile",
+            headless=False
+        )
         page = await ctx.new_page()
         await page.goto(URL)
         print("[INFO] Войди и заполни все поля вручную. Скрипт всё сделает сам в полночь.")
@@ -87,7 +89,7 @@ async def main():
 
         print("⏳ Оставляю окно открытым на 10 минут для оплаты...")
         await asyncio.sleep(600)
-        await browser.close()
+        await ctx.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
